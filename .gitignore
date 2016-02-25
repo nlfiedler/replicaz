@@ -1,0 +1,6 @@
+ebin
+deps
+*.beam
+.rebar
+replicaz
+logs

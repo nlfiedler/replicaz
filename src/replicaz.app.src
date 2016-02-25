@@ -1,0 +1,13 @@
+{application, replicaz, [
+    {description, "Replicate ZFS datasets"},
+    {vsn, "1.0"},
+    {registered, []},
+    {applications, [
+        kernel,
+        stdlib
+    ]},
+    {mod, {replicaz, []}},
+    {env, [
+        {log_file, "/var/log/replica.log"}
+    ]}
+]}.
