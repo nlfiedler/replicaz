@@ -21,21 +21,6 @@
 %%
 %% Script to replicate one ZFS filesystem to another in a repeatable fashion.
 %%
-%% This script creates a snapshot on the source ZFS file system and sends that in
-%% the form of a replication stream to the destination file system. If a previous
-%% snapshot created by this script exists then this script will create a new
-%% snapshot and send an incremental replication stream to the destination. Older
-%% snapshots on both the source and destination will be automatically pruned such
-%% that the two most recent are retained.
-%%
-%% Note that this script uses the -F option for 'zfs recv' such that the
-%% destination file system is rolled back before receiving the snapshot(s). This
-%% is necessary since otherwise the receive will fail due to the mismatch in
-%% existing snapshots. This occurs because simply listing a directory in the
-%% destination will modify the access times, which causes a write to the file
-%% system. The alternative is to make the destination read-only, but that is an
-%% extra step which can be easily avoided.
-%%
 -module(replicaz).
 -export([main/1]).
 
