@@ -29,29 +29,41 @@
 main(Args) ->
     OptSpecList = [
         {help,     $h, "help",    boolean, "display usage"},
+        {version,  $v, "version", boolean, "display version information"},
         {log_file, $l, "logfile", string,  "path to log file"}
     ],
     case getopt:parse(OptSpecList, Args) of
         {ok, {Options, NonOptArgs}} ->
-            case proplists:get_bool(help, Options) of
-                true ->
-                    getopt:usage(OptSpecList, "replicaz", "<source> <dest>");
-                false ->
-                    if length(NonOptArgs) =/= 2 ->
-                            io:format("~nMust pass source and target data sets~n~n"),
-                            exit(badarg);
-                        true -> ok
-                    end,
-                    FromSet = hd(NonOptArgs),
-                    ToSet = hd(tl(NonOptArgs)),
-                    LogFile = proplists:get_value(log_file, Options, ?LOGFILE),
-                    guard_replicate(FromSet, ToSet, LogFile)
-            end;
+            maybe_help(proplists:get_bool(help, Options), OptSpecList, Options, NonOptArgs);
         {error, {Reason, Data}} ->
             io:format("Error: ~s ~p~n~n", [Reason, Data]),
             getopt:usage(OptSpecList, "replicaz", "<source> <dest>")
     end,
     ok.
+
+% Handle the --help optional command-line flag.
+maybe_help(true, OptSpecList, _Options, _NonOptArgs) ->
+    getopt:usage(OptSpecList, "replicaz", "<source> <dest>");
+maybe_help(false, OptSpecList, Options, NonOptArgs) ->
+    maybe_version(proplists:get_bool(version, Options), OptSpecList, Options, NonOptArgs).
+
+% Handle the --version optional command-line flag.
+maybe_version(true, _OptSpecList, _Options, _NonOptArgs) ->
+    ok = application:load(replicaz),
+    {ok, Keys} = application:get_all_key(replicaz),
+    Version = proplists:get_value(vsn, Keys),
+    io:format("replicaz version ~p~n", [Version]);
+maybe_version(false, _OptSpecList, Options, NonOptArgs) ->
+    % Do the real work of this script.
+    if length(NonOptArgs) =/= 2 ->
+            io:format("~nMust pass source and target data sets~n~n"),
+            exit(badarg);
+        true -> ok
+    end,
+    FromSet = hd(NonOptArgs),
+    ToSet = hd(tl(NonOptArgs)),
+    LogFile = proplists:get_value(log_file, Options, ?LOGFILE),
+    guard_replicate(FromSet, ToSet, LogFile).
 
 % Perform the replication, ensuring that the auto-snapshot property is
 % restored to its previous value if an error occurs during replication.
