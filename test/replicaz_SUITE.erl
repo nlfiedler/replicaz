@@ -55,9 +55,10 @@ replicate_test(Config) ->
             %
             % run it once and we should see one set of snapshots
             %
+            BinDir = Cwd ++ "/_build/default/bin",
             RelicaCmd = lists:flatten(io_lib:format(
                 "sudo ~s/replicaz --logfile ~s panzer/anglerfish panzer/turtle",
-                [Cwd, LogFile])),
+                [BinDir, LogFile])),
             ct:log(os:cmd(RelicaCmd)),
             Asnapshots1 = ?cmd("sudo zfs list -H -r -t snapshot panzer/anglerfish"),
             ?assertEqual(1, length(string:tokens(Asnapshots1, "\n"))),

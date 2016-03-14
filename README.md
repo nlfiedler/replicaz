@@ -11,14 +11,14 @@ Note that this application uses the `-F` option for `zfs recv` such that the des
 ### Prerequisites
 
 * [Erlang/OTP](http://www.erlang.org) R17|R18
-* [rebar](https://github.com/rebar/rebar)
+* [rebar3](https://github.com/erlang/rebar3/) 3.0.0 or higher
 
 ### Testing
 
 To build and test the application:
 
 ```
-$ make test
+$ rebar3 test
 ```
 
 ### Releasing
@@ -26,10 +26,10 @@ $ make test
 To produce a self-contained [escript](http://www.erlang.org/doc/man/escript.html), use the `release` make target, like so.
 
 ```
-$ make release
+$ rebar3 build
 ```
 
-The result (named `replicaz`) can be copied to a suitable location (e.g. `/usr/local/bin`) and invoked directly.
+The result (named `replicaz` in the `_build/default/bin` directory) can be copied to a suitable location (e.g. `/usr/local/bin`) and invoked directly.
 
 ## Usage
 

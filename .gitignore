@@ -1,6 +1,4 @@
-ebin
-deps
 *.beam
-.rebar
-replicaz
-logs
+_build
+erl_crash.dump
+rebar.lock
