@@ -252,6 +252,8 @@ prune_old_snapshots(Src, Dst) ->
 % close, returning {ok, ExitStatus} of the last process to finish.
 pipe_until_exit(SendPort, RecvPort, ClosedCount) ->
     receive
+        % TODO: this is blowing up memory
+        % TODO: could there be messages in the queue that are being ignored?
         {_Port, {exit_status, Status}} ->
             if ClosedCount == 1 -> {ok, Status};
                 true -> pipe_until_exit(SendPort, RecvPort, ClosedCount + 1)
