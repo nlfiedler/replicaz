@@ -31,7 +31,6 @@ all() ->
         replicate_test
     ].
 
-
 % Test the ZFS dataset replication.
 replicate_test(Config) ->
     case os:find_executable("zfs") of
