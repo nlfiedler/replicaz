@@ -48,9 +48,9 @@ replicate_test(Config) ->
             ?assertCmd("sudo zfs create panzer/anglerfish"),
             ?assertCmd("sudo zfs create panzer/turtle"),
             ?assertCmd("sudo chmod -R 777 /panzer"),
-            % copy everything except _build, which contain our 64MB files
+            % copy everything except the logs, which contain our 64MB files
             Cwd = os:getenv("PWD"),
-            ?assertCmd("rsync --exclude=_build -r " ++ Cwd ++ "/* /panzer/anglerfish"),
+            ?assertCmd("rsync --exclude=logs -r " ++ Cwd ++ "/* /panzer/anglerfish"),
             %
             % run it once and we should see one set of snapshots
             %
