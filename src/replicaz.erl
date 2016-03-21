@@ -150,20 +150,11 @@ send_snapshot(Src, Dst, Tag) ->
     error_logger:info_msg("sending full snapshot from ~s to ~s~n", [Src, Dst]),
 
     SendCmd = io_lib:format("zfs send -R ~s@~s", [Src, Tag]),
-    SendPort = erlang:open_port({spawn, SendCmd}, [exit_status, binary]),
-
     RecvCmd = io_lib:format("zfs recv -F ~s", [Dst]),
-    RecvPort = erlang:open_port({spawn, RecvCmd}, [exit_status, binary]),
-
-    {ok, 0} = pipe_until_exit(SendPort, RecvPort, 0),
-    case erlang:port_info(SendPort) of
-        undefined -> ok;
-        _         -> true = erlang:port_close(SendPort)
-    end,
-    case erlang:port_info(RecvPort) of
-        undefined -> ok;
-        _         -> true = erlang:port_close(RecvPort)
-    end,
+    % Using ports to pipe the output of one port to the input of another
+    % seems to blow up memory, while using os:cmd/1 means we have no idea
+    % if the processes had an error or not.
+    os:cmd(SendCmd ++ " | " ++ RecvCmd),
     error_logger:info_msg("full snapshot sent from ~s to ~s~n", [Src, Dst]),
     ok.
 
@@ -172,20 +163,9 @@ send_incremental(Src, Dst, Tag1, Tag2) ->
     error_logger:info_msg("sending incremental snapshot from ~s to ~s~n", [Src, Dst]),
 
     SendCmd = io_lib:format("zfs send -R -I ~s ~s@~s", [Tag1, Src, Tag2]),
-    SendPort = erlang:open_port({spawn, SendCmd}, [exit_status, binary]),
-
     RecvCmd = io_lib:format("zfs recv -F ~s", [Dst]),
-    RecvPort = erlang:open_port({spawn, RecvCmd}, [exit_status, binary]),
-
-    {ok, 0} = pipe_until_exit(SendPort, RecvPort, 0),
-    case erlang:port_info(SendPort) of
-        undefined -> ok;
-        _         -> true = erlang:port_close(SendPort)
-    end,
-    case erlang:port_info(RecvPort) of
-        undefined -> ok;
-        _         -> true = erlang:port_close(RecvPort)
-    end,
+    % See note above about ports.
+    os:cmd(SendCmd ++ " | " ++ RecvCmd),
     error_logger:info_msg("incremental snapshot sent from ~s to ~s~n", [Src, Dst]),
     ok.
 
@@ -247,23 +227,3 @@ prune_old_snapshots(Src, Dst) ->
         true -> ok
     end,
     ok.
-
-% Receive data from SendPort and write to RecvPort. Waits for both ports to
-% close, returning {ok, ExitStatus} of the last process to finish.
-pipe_until_exit(SendPort, RecvPort, ClosedCount) ->
-    receive
-        % TODO: this is blowing up memory
-        % TODO: could there be messages in the queue that are being ignored?
-        {_Port, {exit_status, Status}} ->
-            if ClosedCount == 1 -> {ok, Status};
-                true -> pipe_until_exit(SendPort, RecvPort, ClosedCount + 1)
-            end;
-        {SendPort, {data, Data}} ->
-            RecvPort ! {self(), {command, Data}},
-            pipe_until_exit(SendPort, RecvPort, ClosedCount);
-        {RecvPort, {data, Data}} ->
-            error_logger:info_msg("received ~p from receiving port~n", [Data]),
-            pipe_until_exit(SendPort, RecvPort, ClosedCount);
-        {'EXIT', Port, Reason} ->
-            error_logger:error_msg("port ~p exited, ~p~n", [Port, Reason])
-    end.
