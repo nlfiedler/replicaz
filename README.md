@@ -10,7 +10,7 @@ Note that this application uses the `-F` option for `zfs recv` such that the des
 
 ### Prerequisites
 
-* [Erlang/OTP](http://www.erlang.org) R17|R18
+* [Erlang/OTP](http://www.erlang.org) R17 or higher
 * [rebar3](https://github.com/erlang/rebar3/) 3.0.0 or higher
 
 ### Testing
