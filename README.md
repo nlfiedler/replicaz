@@ -1,6 +1,6 @@
 # Replicate ZFS datasets
 
-Replicates ZFS datasets, for the purpose of backing up the data. This implies that the backup is located on-site, and hence not a "real" backup. For off-site backup, see the [akashita](https://github.com/nlfiedler/akashita) project, which uploads select portions of ZFS datasets to Amazon Glacier.
+Replicates ZFS datasets, for the purpose of backing up the data. This implies that the backup is located on-site, and hence not a "real" backup. For off-site backup, see the [akashita](https://github.com/nlfiedler/akashita) project, which uploads select portions of ZFS datasets to Google Cloud Storage.
 
 This application creates a snapshot on the source ZFS file system and sends that in the form of a replication stream to the destination file system. If a previous snapshot created by this application exists then this application will create a new snapshot and send an incremental replication stream to the destination. Older snapshots on both the source and destination will be automatically pruned such that the two most recent are retained.
 
@@ -18,7 +18,7 @@ Note that this application uses the `-F` option for `zfs recv` such that the des
 To build and test the application:
 
 ```
-$ rebar3 test
+$ rebar3 ct
 ```
 
 ### Releasing
@@ -26,7 +26,7 @@ $ rebar3 test
 To produce a self-contained [escript](http://www.erlang.org/doc/man/escript.html), use the `release` make target, like so.
 
 ```
-$ rebar3 build
+$ rebar3 escriptize
 ```
 
 The result (named `replicaz` in the `_build/default/bin` directory) can be copied to a suitable location (e.g. `/usr/local/bin`) and invoked directly.
@@ -40,3 +40,15 @@ $ /usr/local/bin/replicaz tank backup
 ```
 
 Typically this script is run via a cron job.
+
+### Remote Replication
+
+The replicaz script can replicate a ZFS dataset to another system, as long as it also has ZFS support, and `zfs` can be found within a non-interactive shell, and the appropriate SSH configuration has been performed. In particular, create a public/private key pair and copy the public key to the remote system. Then invoke `replicaz` with the `--remote` option and a value of the form `username@hostname`, where `username` is the name of a user with permission to alter ZFS datasets, and `hostname` is the name of the remote system.
+
+```
+# ssh-keygen -t rsa
+# ssh-copy-id -i ~/.ssh/id_rsa username@hostname
+# /usr/local/bin/replicaz --remote username@hostname tank backup
+```
+
+If the user for the remote system lacks privileges for running ZFS commands, but has sudo access, then add the `--sudo` option, which will prefix all remote commands with `sudo`. The `--sudo` option only affects remote commands. For local sudo access, run `replicaz` using `sudo`.

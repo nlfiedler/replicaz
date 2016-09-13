@@ -29,9 +29,9 @@
 all() ->
     [
         replicate_test
+        % replicate_over_ssh_test
     ].
 
-% Test the ZFS dataset replication.
 replicate_test(Config) ->
     case os:find_executable("zfs") of
         false ->
@@ -54,7 +54,7 @@ replicate_test(Config) ->
             %
             % run it once and we should see one set of snapshots
             %
-            BinDir = Cwd ++ "/_build/default/bin",
+            BinDir = Cwd ++ "/_build/test/bin",
             RelicaCmd = lists:flatten(io_lib:format(
                 "sudo ~s/replicaz --logfile ~s panzer/anglerfish panzer/turtle",
                 [BinDir, LogFile])),
@@ -88,6 +88,50 @@ replicate_test(Config) ->
             ?assertCmd("sudo zpool destroy panzer"),
             ok = file:delete(FSFile)
     end.
+
+%
+% Difficult to get this working. Requires setting up the public/private SSH
+% key pair, the host verification, and the path to the zfs binary. None of
+% this is automatic for all systems at this point.
+%
+% replicate_over_ssh_test(_Config) ->
+%     case os:find_executable("zfs") of
+%         false ->
+%             ct:log("missing 'zfs' in PATH, skipping test..."),
+%             ok;
+%         _ZfsBin ->
+%             PrivDir = ?config(priv_dir, Config),
+%             LogFile = filename:join(PrivDir, "replica.log"),
+%             % create the datasets for testing
+%             FSFile = filename:join(PrivDir, "tank_file"),
+%             mkfile(FSFile),
+%             % ZFS on Mac and Linux both require sudo access, and FreeBSD doesn't mind
+%             ?assertCmd("sudo zpool create -m /panzer panzer " ++ FSFile),
+%             ?assertCmd("sudo zfs create panzer/anglerfish"),
+%             ?assertCmd("sudo zfs create panzer/turtle"),
+%             ?assertCmd("sudo chmod -R 777 /panzer"),
+%             % copy everything except the logs, which contain our 64MB files
+%             Cwd = os:getenv("PWD"),
+%             ?assertCmd("rsync --exclude=logs -r " ++ Cwd ++ "/* /panzer/anglerfish"),
+%             %
+%             % run it once and we should see one set of snapshots
+%             %
+%             BinDir = Cwd ++ "/_build/test/bin",
+%             UserHost = os:getenv("USER") ++ "@localhost",
+%             RelicaCmd = lists:flatten(io_lib:format(
+%                 "sudo ~s/replicaz --logfile ~s --remote ~s --sudo panzer/anglerfish panzer/turtle",
+%                 [BinDir, LogFile, UserHost])),
+%             ct:log(os:cmd(RelicaCmd)),
+%             Asnapshots1 = ?cmd("sudo zfs list -H -r -t snapshot panzer/anglerfish"),
+%             ?assertEqual(1, length(string:tokens(Asnapshots1, "\n"))),
+%             Tsnapshots1 = ?cmd("sudo zfs list -H -r -t snapshot panzer/turtle"),
+%             ?assertEqual(1, length(string:tokens(Tsnapshots1, "\n"))),
+%             %
+%             % clean up
+%             %
+%             ?assertCmd("sudo zpool destroy panzer"),
+%             ok = file:delete(FSFile)
+%     end.
 
 % Run the mkfile command (or its Linux equivalent) to create a temporary
 % filesytem for ZFS to use as a storage pool.
