@@ -56,7 +56,7 @@ replicate_test(Config) ->
             %
             BinDir = Cwd ++ "/_build/test/bin",
             RelicaCmd = lists:flatten(io_lib:format(
-                "sudo ~s/replicaz --logfile ~s panzer/anglerfish panzer/turtle",
+                "sudo ~s/replicaz --logfile ~s --label test panzer/anglerfish panzer/turtle",
                 [BinDir, LogFile])),
             ct:log(os:cmd(RelicaCmd)),
             Asnapshots1 = ?cmd("sudo zfs list -H -r -t snapshot panzer/anglerfish"),

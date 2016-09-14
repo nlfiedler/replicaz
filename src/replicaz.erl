@@ -32,9 +32,10 @@ main(Args) ->
     OptSpecList = [
         {help,     $h, "help",    boolean, "display usage"},
         {version,  $v, "version", boolean, "display version information"},
-        {log_file, $l, "logfile", string,  "path to log file"},
+        {log_file, $l, "logfile", string,  "path to log file (default " ++ ?LOGFILE ++ ")"},
         {remote,   $r, "remote",  string,  "user@host for SSH"},
-        {sudo,     $s, "sudo",    boolean, "use sudo for SSH commands"}
+        {sudo,     $s, "sudo",    boolean, "use sudo for SSH commands"},
+        {label,    $L, "label",   string,  "for the snapshot names (default 'replica')"}
     ],
     case getopt:parse(OptSpecList, Args) of
         {ok, {Options, NonOptArgs}} ->
@@ -64,6 +65,8 @@ maybe_version(false, _OptSpecList, Options, [FromSet, ToSet]) ->
     ok = application:set_env(replicaz, remote, Remote),
     UseSudo = proplists:get_value(sudo, Options, false),
     ok = application:set_env(replicaz, use_sudo, UseSudo),
+    Label = proplists:get_value(label, Options, "replica"),
+    ok = application:set_env(replicaz, label, Label),
     guard_replicate(FromSet, ToSet, LogFile);
 maybe_version(false, _OptSpecList, _Options, _Args) ->
     io:format("~nMust pass source and target data sets~n~n").
@@ -126,13 +129,16 @@ get_snapshot_setting(DataSet, CmdRunner) ->
 % function, which handles local versus remote command execution.
 our_snapshots(DataSet, CmdRunner) ->
     % Get our mananged snapshots for the given file system, such that they
-    % are named "replica:" followed by a date in the ISO 8601 format (i.e.
-    % YYYY-mm-dd-HH:MM:SS).
+    % contain the given label, followed by a date in the ISO 8601 format
+    % (i.e. YYYY-mm-dd-HH:MM:SS).
+    %
+    % For example: dataset@replica:2016-09-03-04:15:12
     error_logger:info_msg("fetching snapshots for ~s", [DataSet]),
     SnapshotsOut = CmdRunner("zfs list -t snapshot -Hro name " ++ DataSet),
     SplitOutput = re:split(SnapshotsOut, "\n", [{return, list}]),
     Snapshots = lists:filter(fun(Line) -> length(Line) > 0 end, SplitOutput),
-    {ok, MP} = re:compile("@replica:\\d{4}-\\d{2}-\\d{2}-\\d{2}:\\d{2}:\\d{2}"),
+    {ok, Label} = application:get_env(replicaz, label),
+    {ok, MP} = re:compile("@" ++ Label ++ ":\\d{4}-\\d{2}-\\d{2}-\\d{2}:\\d{2}:\\d{2}"),
     KeepOurs = fun(Elem) ->
         case re:run(Elem, MP) of
             {match, _Captured} -> true;
@@ -170,7 +176,8 @@ create_and_send_snapshot(Src, Dst) ->
     {{Year, Month, Day}, {Hour, Min, Sec}} = erlang:universaltime(),
     Tag = io_lib:format("~4.10.0B-~2.10.0B-~2.10.0B-~2.10.0B:~2.10.0B:~2.10.0B",
                         [Year, Month, Day, Hour, Min, Sec]),
-    Snapname = io_lib:format("~s@replica:~s", [Src, Tag]),
+    {ok, Label} = application:get_env(replicaz, label),
+    Snapname = io_lib:format("~s@~s:~s", [Src, Label, Tag]),
     run_local_cmd("zfs snapshot " ++ Snapname),
     error_logger:info_msg("created snapshot ~s", [Snapname]),
     SrcSnaps = our_snapshots(Src, fun run_local_cmd/1),
