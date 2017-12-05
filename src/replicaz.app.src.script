@@ -1,0 +1,51 @@
+%
+% Configure the application, with optional user overrides.
+%
+% If a file named user_env.config exists at the base of the application tree,
+% then it will be used to override settings in the application environment.
+%
+% An example configuration file, with two data sets:
+%
+% {datasets, [
+%     {"chihiro", [
+%         {from_dataset, "zeniba/shared"},
+%         {to_dataset, "zeniba/shared"},
+%         {period, hourly},
+%         {frequency, 1},
+%         {ssh_host, "chihiro"},
+%         {ssh_user, "nfiedler"},
+%         {use_sudo, true}
+%     ]},
+%     {"safe", [
+%         {from_dataset, "zeniba/shared"},
+%         {to_dataset, "safe/shared"},
+%         {period, daily},
+%         {frequency, 1}
+%     ]}
+% ]}
+%
+% The SSH values are only necessary when connecting to a remote system, as
+% in the first dataset in the example above (a host named "chihiro").
+%
+DefaultEnv = [
+].
+AppEnv = case file:consult("user_env.config") of
+    {ok, Terms} ->
+        lists:ukeymerge(1, lists:keysort(1, Terms),  lists:keysort(1, DefaultEnv));
+    {error, enoent} ->
+        DefaultEnv
+    % else, surface the error
+end.
+App = [
+    {description, "Replicate ZFS datasets"},
+    {vsn, "2.0.0"},
+    {registered, []},
+    {applications, [
+        kernel,
+        stdlib,
+        lager
+    ]},
+    {mod, {replicaz_app, []}},
+    {env, AppEnv}
+].
+[{application, replicaz, App}].

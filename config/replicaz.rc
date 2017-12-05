@@ -1,0 +1,38 @@
+#!/bin/sh
+#
+# PROVIDE: replicaz
+# REQUIRE: NETWORKING
+# KEYWORD: shutdown
+#
+# Start and stop the replicaz daemon using BSD-style rc.d system. Copy this file
+# to /usr/local/etc/rc.d, make the file executable, enable the service by
+# appending 'replicaz_enable="YES"' to the end of /etc/rc.conf, and then start
+# it like so:
+#
+# $ sudo service replicaz start
+#
+
+. /etc/rc.subr
+
+name=replicaz
+rcvar=replicaz_enable
+start_cmd="${name}_start"
+stop_cmd="${name}_stop"
+
+load_rc_config $name
+: ${replicaz_enable:="yes"}
+
+replicaz_start() {
+    # With the service command, /usr/local/bin will be absent from the PATH,
+    # which this script requires, otherwise it quietly fails to start.
+    PATH=/usr/local/bin:$PATH /opt/replicaz/bin/replicaz -detached
+}
+
+replicaz_stop() {
+    # Quietly connect to the other instance and tell it to shut down. The node
+    # name must match what is found in the vm.args configuration file.
+    /usr/local/bin/erl -noshell -sname stop_replicaz@localhost \
+        -eval "rpc:call(replicaz@localhost, init, stop, []), init:stop()."
+}
+
+run_rc_command "$1"

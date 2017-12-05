@@ -1,7 +1,7 @@
 %% -*- coding: utf-8 -*-
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015-2016 Nathan Fiedler
+%% Copyright (c) 2015-2017 Nathan Fiedler
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -22,87 +22,30 @@
 %% Script to replicate one ZFS filesystem to another in a repeatable fashion.
 %%
 -module(replicaz).
--export([main/1]).
+-export([guard_replicate/2]).
 
 -include_lib("kernel/include/file.hrl").
 
--define(LOGFILE, "/var/log/replica.log").
-
-main(Args) ->
-    OptSpecList = [
-        {help,     $h, "help",    boolean, "display usage"},
-        {version,  $v, "version", boolean, "display version information"},
-        {log_file, $l, "logfile", string,  "path to log file (default " ++ ?LOGFILE ++ ")"},
-        {remote,   $r, "remote",  string,  "user@host for SSH"},
-        {sudo,     $s, "sudo",    boolean, "use sudo for SSH commands"},
-        {label,    $L, "label",   string,  "for the snapshot names (default 'replica')"}
-    ],
-    case getopt:parse(OptSpecList, Args) of
-        {ok, {Options, NonOptArgs}} ->
-            maybe_help(proplists:get_bool(help, Options), OptSpecList, Options, NonOptArgs);
-        {error, {Reason, Data}} ->
-            io:format("Error: ~s ~p~n~n", [Reason, Data]),
-            getopt:usage(OptSpecList, "replicaz", "<source> <dest>")
-    end,
-    ok.
-
-% Handle the --help optional command-line flag.
-maybe_help(true, OptSpecList, _Options, _NonOptArgs) ->
-    getopt:usage(OptSpecList, "replicaz", "<source> <dest>");
-maybe_help(false, OptSpecList, Options, NonOptArgs) ->
-    maybe_version(proplists:get_bool(version, Options), OptSpecList, Options, NonOptArgs).
-
-% Handle the --version optional command-line flag.
-maybe_version(true, _OptSpecList, _Options, _NonOptArgs) ->
-    ok = application:load(replicaz),
-    {ok, Keys} = application:get_all_key(replicaz),
-    Version = proplists:get_value(vsn, Keys),
-    io:format("replicaz version ~p~n", [Version]);
-maybe_version(false, _OptSpecList, Options, [FromSet, ToSet]) ->
-    % Do the real work of this script.
-    LogFile = proplists:get_value(log_file, Options, ?LOGFILE),
-    Remote = proplists:get_value(remote, Options, false),
-    ok = application:set_env(replicaz, remote, Remote),
-    UseSudo = proplists:get_value(sudo, Options, false),
-    ok = application:set_env(replicaz, use_sudo, UseSudo),
-    Label = proplists:get_value(label, Options, "replica"),
-    ok = application:set_env(replicaz, label, Label),
-    guard_replicate(FromSet, ToSet, LogFile);
-maybe_version(false, _OptSpecList, _Options, _Args) ->
-    io:format("~nMust pass source and target data sets~n~n").
-
 % Perform the replication, ensuring that the auto-snapshot property is
 % restored to its previous value if an error occurs during replication.
-guard_replicate(FromSet, ToSet, LogFile) ->
-    % open the log file
-    case error_logger:logfile({open, LogFile}) of
-        ok -> ok;
-        {error, Reason} ->
-            io:format("Cannot open log file: ~s", [Reason]),
-            exit(eaccess)
-    end,
-    error_logger:tty(false),
-    error_logger:info_msg("Replication beginning..."),
-    % Out of sheer laziness, start SSH unconditionally.
+guard_replicate(FromSet, ToSet) ->
+    % out of sheer laziness, start SSH unconditionally
     ssh:start(),
     % capture the current auto-snapshot settings
     FromSnapVal = get_snapshot_setting(FromSet, fun run_local_cmd/1),
     ToSnapVal = get_snapshot_setting(ToSet, fun run_dest_cmd/1),
     % perform the actual replication
     try replicate(FromSet, ToSet) of
-        _ -> error_logger:info_msg("replication from ~s to ~s complete", [FromSet, ToSet])
+        _ -> lager:info("replication from ~s to ~s complete", [FromSet, ToSet])
     catch
         Type:Error ->
-            error_logger:error_msg("replication failure, ~p, ~p~n~p",
+            lager:error("replication failure, ~p, ~p~n~p",
                 [Type, Error, erlang:get_stacktrace()])
     after
         % ensure snapshot setting is restored on both data sets
         run_local_cmd(io_lib:format("zfs set com.sun:auto-snapshot=~s ~s", [FromSnapVal, FromSet])),
-        run_dest_cmd(io_lib:format("zfs set com.sun:auto-snapshot=~s ~s", [ToSnapVal, ToSet])),
-        ok
+        run_dest_cmd(io_lib:format("zfs set com.sun:auto-snapshot=~s ~s", [ToSnapVal, ToSet]))
     end,
-    % close the log file to ensure the records are flushed
-    ok = error_logger:logfile(close),
     ok.
 
 % Create a snapshot on the source and send it to the destination.
@@ -122,7 +65,7 @@ replicate(FromSet, ToSet) ->
 get_snapshot_setting(DataSet, CmdRunner) ->
     Output = CmdRunner("zfs get -Ho value com.sun:auto-snapshot " ++ DataSet),
     Value = string:strip(Output, both, $\n),
-    error_logger:info_msg("~p com.sun:auto-snapshot=~p", [DataSet, Value]),
+    lager:info("~p com.sun:auto-snapshot=~p", [DataSet, Value]),
     Value.
 
 % Return a list of the snapshots created by this script, using the given
@@ -133,11 +76,11 @@ our_snapshots(DataSet, CmdRunner) ->
     % (i.e. YYYY-mm-dd-HH:MM:SS).
     %
     % For example: dataset@replica:2016-09-03-04:15:12
-    error_logger:info_msg("fetching snapshots for ~s", [DataSet]),
+    lager:info("fetching snapshots for ~s", [DataSet]),
     SnapshotsOut = CmdRunner("zfs list -t snapshot -Hro name " ++ DataSet),
     SplitOutput = re:split(SnapshotsOut, "\n", [{return, list}]),
     Snapshots = lists:filter(fun(Line) -> length(Line) > 0 end, SplitOutput),
-    {ok, Label} = application:get_env(replicaz, label),
+    Label = erlang:get(rpz_label),
     {ok, MP} = re:compile("@" ++ Label ++ ":\\d{4}-\\d{2}-\\d{2}-\\d{2}:\\d{2}:\\d{2}"),
     KeepOurs = fun(Elem) ->
         case re:run(Elem, MP) of
@@ -151,20 +94,20 @@ our_snapshots(DataSet, CmdRunner) ->
 
 % Send a replication stream for a single snapshot.
 send_full(Src, Dst, Tag) ->
-    error_logger:info_msg("sending full snapshot from ~s to ~s", [Src, Dst]),
-    SendCmd = io_lib:format("zfs send -R ~s@~s", [Src, Tag]),
+    lager:info("sending full snapshot from ~s to ~s", [Src, Dst]),
+    SendCmd = maybe_local_sudo(io_lib:format("zfs send -R ~s@~s", [Src, Tag])),
     RecvCmd = build_recv_cmd("zfs recv -F " ++ Dst),
     run_local_cmd(generate_pipe_script(SendCmd, RecvCmd)),
-    error_logger:info_msg("full snapshot sent from ~s to ~s", [Src, Dst]),
+    lager:info("full snapshot sent from ~s to ~s", [Src, Dst]),
     ok.
 
 % Send an incremental replication stream from source to target.
 send_incremental(Src, Dst, Tag1, Tag2) ->
-    error_logger:info_msg("sending incremental snapshot from ~s to ~s", [Src, Dst]),
-    SendCmd = io_lib:format("zfs send -R -I ~s ~s@~s", [Tag1, Src, Tag2]),
+    lager:info("sending incremental snapshot from ~s to ~s", [Src, Dst]),
+    SendCmd = maybe_local_sudo(io_lib:format("zfs send -R -I ~s ~s@~s", [Tag1, Src, Tag2])),
     RecvCmd = build_recv_cmd("zfs recv -F " ++ Dst),
     run_local_cmd(generate_pipe_script(SendCmd, RecvCmd)),
-    error_logger:info_msg("incremental snapshot sent from ~s to ~s", [Src, Dst]),
+    lager:info("incremental snapshot sent from ~s to ~s", [Src, Dst]),
     ok.
 
 % Create a snapshot and send it to the destination.
@@ -176,10 +119,10 @@ create_and_send_snapshot(Src, Dst) ->
     {{Year, Month, Day}, {Hour, Min, Sec}} = erlang:universaltime(),
     Tag = io_lib:format("~4.10.0B-~2.10.0B-~2.10.0B-~2.10.0B:~2.10.0B:~2.10.0B",
                         [Year, Month, Day, Hour, Min, Sec]),
-    {ok, Label} = application:get_env(replicaz, label),
+    Label = erlang:get(rpz_label),
     Snapname = io_lib:format("~s@~s:~s", [Src, Label, Tag]),
     run_local_cmd("zfs snapshot " ++ Snapname),
-    error_logger:info_msg("created snapshot ~s", [Snapname]),
+    lager:info("created snapshot ~s", [Snapname]),
     SrcSnaps = our_snapshots(Src, fun run_local_cmd/1),
     DestSnaps = our_snapshots(Dst, fun run_dest_cmd/1),
     send_snapshot(Src, Dst, SrcSnaps, DestSnaps).
@@ -188,7 +131,7 @@ create_and_send_snapshot(Src, Dst) ->
 % state of the existing snapshots on both the source and destination
 % datasets.
 send_snapshot(Src, _Dst, [], _DestSnaps) ->
-    error_logger:error_msg("Failed to create new snapshot in ~s", [Src]),
+    lager:error("Failed to create new snapshot in ~s", [Src]),
     throw(snapshot_failed);
 send_snapshot(Src, Dst, [SrcSnap], _DestSnaps) ->
     % send the initial snapshot
@@ -201,7 +144,7 @@ send_snapshot(Src, Dst, SrcSnaps, DestSnaps) ->
         true -> ok;
         false ->
             Msg = "Destination snapshots out of sync, destroy and try again.",
-            error_logger:error_msg(Msg),
+            lager:error(Msg),
             throw(snapshot_failed)
     end,
     % destination has matching snapshots, send an incremental
@@ -215,10 +158,10 @@ prune_old_snapshots(Dataset, Snapshots, CmdRunner) when length(Snapshots) > 2 ->
     Destroy = fun(Name, Snap) ->
         Output = CmdRunner("zfs destroy " ++ Name ++ "@" ++ Snap),
         if length(Output) > 1 ->
-                error_logger:error_msg("zfs destroy output: ~s", [Output]);
+                lager:error("zfs destroy output: ~s", [Output]);
             true -> ok
         end,
-        error_logger:info_msg("deleted old snapshot ~s", [Snap])
+        lager:info("deleted old snapshot ~s", [Snap])
     end,
     [Destroy(Dataset, S) || S <- lists:sublist(Snapshots, length(Snapshots) - 2)],
     ok;
@@ -236,7 +179,7 @@ generate_pipe_script(FirstCmd, SecondCmd) ->
     % the PIPESTATUS, which requires using bash.
     case os:find_executable("bash", "/bin:/usr/bin:/usr/local/bin") of
         false ->
-            error_logger:info_msg("cannot find 'bash' in /bin:/usr/bin:/usr/local/bin"),
+            lager:info("cannot find 'bash' in /bin:/usr/bin:/usr/local/bin"),
             error(missing_bash);
         Bash ->
             Cmds = [
@@ -258,8 +201,11 @@ generate_pipe_script(FirstCmd, SecondCmd) ->
 
 % Run the given command using a port and ensure it exits without error.
 % Return the output from the command as a list of bytes.
+run_local_cmd("zfs " ++ Cmd) ->
+    % running zfs commands locally often requires sudo
+    run_local_cmd(maybe_local_sudo("zfs " ++ Cmd));
 run_local_cmd(Cmd) ->
-    error_logger:info_msg("running local cmd: ~s", [Cmd]),
+    lager:info("running local cmd: ~s", [Cmd]),
     ScriptPort = erlang:open_port({spawn, Cmd}, [exit_status]),
     {ok, 0, Output} = wait_for_port(ScriptPort),
     Output.
@@ -268,19 +214,22 @@ run_local_cmd(Cmd) ->
 % over an SSH connection, and possibly prefixed with "sudo" (but only if
 % remote). Return the output as a list of bytes.
 run_dest_cmd(Cmd) ->
-    run_dest_cmd(Cmd, application:get_env(replicaz, remote, false)).
+    run_dest_cmd(Cmd, get_remote()).
 
 % Run the given command using a port and ensure it exits without error.
 % Return the output from the command as a list of bytes. If Remote is a
-% string (and not 'false') then use SSH to run the command.
-run_dest_cmd(Cmd, false) ->
-    error_logger:info_msg("running dest cmd locally: ~s", [Cmd]),
+% string (and not 'undefined') then use SSH to run the command.
+run_dest_cmd("zfs " ++ Cmd, undefined) ->
+    % running zfs commands locally often requires sudo
+    run_dest_cmd(maybe_local_sudo("zfs " ++ Cmd), undefined);
+run_dest_cmd(Cmd, undefined) ->
+    lager:info("running dest cmd locally: ~s", [Cmd]),
     ScriptPort = erlang:open_port({spawn, Cmd}, [exit_status]),
     {ok, 0, Output} = wait_for_port(ScriptPort),
     Output;
 run_dest_cmd(Cmd, Remote) ->
     FinalCmd = maybe_add_sudo(Cmd),
-    error_logger:info_msg("running dest cmd remotely: ~s", [FinalCmd]),
+    lager:info("running dest cmd remotely: ~s", [FinalCmd]),
     {ConnectionRef, ChannelId} = ssh_connect(Remote),
     success = ssh_connection:exec(ConnectionRef, ChannelId, FinalCmd, infinity),
     {ok, 0, Output} = wait_for_closed(ConnectionRef, ChannelId),
@@ -342,37 +291,48 @@ wait_for_port(Port, Quiet, Output) when is_boolean(Quiet) ->
             ensure_port_closed(Port),
             {ok, Status, Output};
         {Port, {data, Data}} ->
-            if Quiet -> error_logger:warning_msg("output from port ignored...");
-                true -> error_logger:warning_msg("received output from port: ~s", [Data])
+            if Quiet -> lager:warning("output from port ignored...");
+                true -> lager:warning("received output from port: ~s", [Data])
             end,
             wait_for_port(Port, Quiet, Output ++ Data);
         {'EXIT', Port, Reason} ->
-            error_logger:info_msg("port ~w exited, ~w", [Port, Reason]),
+            lager:info("port ~w exited, ~w", [Port, Reason]),
             {error, Reason}
     end.
 
-% Ensure that the given Port has been properly closed. Does nothing if the
-% port is not open.
+% Ensure that the given Port has been properly closed.
 ensure_port_closed(Port) ->
     case erlang:port_info(Port) of
         undefined -> ok;
-        _         -> erlang:port_close(Port)
+        _ -> erlang:port_close(Port)
     end.
 
-% Construct the command for the receiving end of the replication stream. If
-% the 'remote' app env setting is not 'false', then prepend the command
-% with "ssh" and the value of Remote. If 'remote' is not 'false', and
-% 'use_sudo' is true, prepend the command with "sudo".
+% Construct the command for the receiving end of the replication stream.
 build_recv_cmd(Cmd) ->
-    case application:get_env(replicaz, remote, false) of
-        false -> Cmd;
+    case get_remote() of
+        undefined -> maybe_local_sudo(Cmd);
         Remote -> string:join(["ssh", Remote, maybe_add_sudo(Cmd)], " ")
     end.
 
-% If the application is configured to use sudo for remote commands, prepend
-% the given command with "sudo".
+% Prepend the given command with "sudo", as needed.
 maybe_add_sudo(Cmd) ->
-    case application:get_env(replicaz, use_sudo, false) of
-        false -> Cmd;
-        true -> "sudo " ++ Cmd
+    case erlang:get(rpz_use_sudo) of
+        undefined -> Cmd;
+        _ -> "sudo " ++ Cmd
+    end.
+
+% Prepend the given command with "sudo", as needed.
+maybe_local_sudo(Cmd) ->
+    case erlang:get(rpz_local_sudo) of
+        undefined -> Cmd;
+        _ -> "sudo " ++ Cmd
+    end.
+
+% Return either "<ssh_user>@<ssh_host>" or undefined.
+get_remote() ->
+    case erlang:get(rpz_ssh_host) of
+        undefined -> undefined;
+        {ok, Host} ->
+            User = erlang:get(rpz_ssh_user),
+            string:join([User, Host], "@")
     end.

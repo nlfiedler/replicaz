@@ -1,0 +1,8 @@
+# only show the programmed prompt
+-noshell
+
+# for remote access & debugging
+-sname replicaz@localhost
+
+# make sure we actually shut down when asked
+-shutdown_time 5000
