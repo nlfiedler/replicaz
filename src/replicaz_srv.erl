@@ -116,7 +116,7 @@ create_timer(State) ->
     {Key, Values} = State#state.dataset,
     Period = proplists:get_value(period, Values),
     Frequency = proplists:get_value(frequency, Values),
-    lager:info("setting ~s timer for period ~s, frequency ~s", [Key, Period, Frequency]),
+    lager:info("setting ~s timer for period ~s, frequency ~w", [Key, Period, Frequency]),
     {ok, Timer} = timer:apply_after(timer_value(Period, Frequency), M, F, A),
     State#state{timer=Timer}.
 
