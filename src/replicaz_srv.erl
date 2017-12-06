@@ -92,11 +92,11 @@ process_dataset({Key, Values}) ->
         undefined -> erlang:erase(rpz_ssh_user);
         SshUser -> erlang:put(rpz_ssh_user, SshUser)
     end,
-    lager:info("starting replication of dataset ~w", [Key]),
+    lager:info("starting replication of dataset ~s", [Key]),
     FromSet = proplists:get_value(from_dataset, Values),
     ToSet = proplists:get_value(to_dataset, Values),
     replicaz:guard_replicate(FromSet, ToSet),
-    lager:info("finished replication of dataset ~w", [Key]).
+    lager:info("finished replication of dataset ~s", [Key]).
 
 % Cancel the existing timer, if any, and return the updated state.
 cancel_timer(State) ->
@@ -116,7 +116,7 @@ create_timer(State) ->
     {Key, Values} = State#state.dataset,
     Period = proplists:get_value(period, Values),
     Frequency = proplists:get_value(frequency, Values),
-    lager:info("setting ~w timer for period ~w, frequency ~w", [Key, Period, Frequency]),
+    lager:info("setting ~s timer for period ~s, frequency ~s", [Key, Period, Frequency]),
     {ok, Timer} = timer:apply_after(timer_value(Period, Frequency), M, F, A),
     State#state{timer=Timer}.
 
