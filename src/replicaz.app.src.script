@@ -45,6 +45,11 @@ App = [
         stdlib,
         lager
     ]},
+    {included_applications, [
+        crypto,
+        public_key,
+        ssh
+    ]},
     {mod, {replicaz_app, []}},
     {env, AppEnv}
 ].
