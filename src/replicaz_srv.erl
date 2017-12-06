@@ -23,22 +23,22 @@
 %%
 -module(replicaz_srv).
 -behavior(gen_server).
--export([start_link/1]).
+-export([start_link/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--record(state, {timer, dataset}).
+-record(state, {myname, timer, dataset}).
 
 %%
 %% Client API
 %%
-start_link(Dataset) ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, Dataset, []).
+start_link(MyName, Dataset) ->
+    gen_server:start_link({local, MyName}, ?MODULE, {MyName, Dataset}, []).
 
 %%
 %% gen_server callbacks
 %%
-init(Dataset) ->
-    State = #state{dataset=Dataset},
+init({MyName, Dataset}) ->
+    State = #state{myname=MyName, dataset=Dataset},
     NewState = create_timer(State),
     {ok, NewState}.
 
@@ -108,19 +108,17 @@ cancel_timer(State) ->
 
 % Create a new timer, returning the updated state.
 create_timer(State) ->
-    {ok, Timer} = fire_later(State#state.dataset),
-    State#state{timer=Timer}.
-
-% Start a timer to cast a 'process' message to us at the next backup time
-% for the given dataset.
-fire_later({Key, Values}) ->
+    % Start a timer to cast a 'process' message to us at the next backup time
+    % for the given dataset.
     M = gen_server,
     F = cast,
-    A = [replicaz_srv, process],
+    A = [State#state.myname, process],
+    {Key, Values} = State#state.dataset,
     Period = proplists:get_value(period, Values),
     Frequency = proplists:get_value(frequency, Values),
     lager:info("setting ~w timer for period ~w, frequency ~w", [Key, Period, Frequency]),
-    timer:apply_after(timer_value(Period, Frequency), M, F, A).
+    {ok, Timer} = timer:apply_after(timer_value(Period, Frequency), M, F, A),
+    State#state{timer=Timer}.
 
 % Return the milliseconds for the given period and frequency. For instance, a
 % period of 'hourly' and frequency of 12 yields 43,200,000 milliseconds.

@@ -29,8 +29,11 @@ start_link(Datasets) ->
 
 init(Datasets) ->
     Children = lists:map(fun(Dataset) ->
-        { replicaz_srv
-        , {replicaz_srv, start_link, [Dataset]}
+        % generate a unique identifier for the server process
+        Label = element(1, Dataset),
+        ServerName = list_to_atom("replicaz_srv_" ++ Label),
+        { ServerName
+        , {replicaz_srv, start_link, [ServerName, Dataset]}
         , permanent, 5000, worker, [replicaz_srv]
         }
     end, Datasets),

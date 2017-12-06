@@ -73,7 +73,11 @@ replicate_test(Config) ->
             %
             % load the application so we can override the config params
             ok = application:load(replicaz),
-            % set up the application environment to copy our dataset
+            %
+            % Set up the application environment to copy our dataset.
+            % Configure two of them to test the supervisor initialization.
+            % The second one never actually runs.
+            %
             DatasetsConf = [{"cmntest", [
                 {from_dataset, AnglerFish},
                 {to_dataset, Turtle},
@@ -81,11 +85,16 @@ replicate_test(Config) ->
                 {frequency, 1},
                 {use_sudo, true},
                 {local_sudo, true}  % tests are not run as root, need sudo
+            ]}, {"nise", [
+                {from_dataset, "whatever"},
+                {to_dataset, "dontmind"},
+                {period, weekly},
+                {frequency, 4}
             ]}],
             ok = application:set_env(replicaz, datasets, DatasetsConf),
             % fire up the application and wait for it to finish
             {ok, _Started} = application:ensure_all_started(replicaz),
-            ok = gen_server:call(replicaz_srv, test_backup),
+            ok = gen_server:call(replicaz_srv_cmntest, test_backup),
             Asnapshots1 = ?cmd("sudo zfs list -H -r -t snapshot " ++ AnglerFish),
             ?assertEqual(1, length(string:tokens(Asnapshots1, "\n"))),
             Tsnapshots1 = ?cmd("sudo zfs list -H -r -t snapshot " ++ Turtle),
@@ -96,7 +105,7 @@ replicate_test(Config) ->
             %
             ok = timer:sleep(1100),
             writefile("/" ++ AnglerFish ++ "/random1.dat"),
-            ok = gen_server:call(replicaz_srv, test_backup),
+            ok = gen_server:call(replicaz_srv_cmntest, test_backup),
             Asnapshots2 = ?cmd("sudo zfs list -H -r -t snapshot " ++ AnglerFish),
             ?assertEqual(2, length(string:tokens(Asnapshots2, "\n"))),
             Tsnapshots2 = ?cmd("sudo zfs list -H -r -t snapshot " ++ Turtle),
@@ -107,7 +116,7 @@ replicate_test(Config) ->
             %
             ok = timer:sleep(1100),
             writefile("/" ++ AnglerFish ++ "/random2.dat"),
-            ok = gen_server:call(replicaz_srv, test_backup),
+            ok = gen_server:call(replicaz_srv_cmntest, test_backup),
             Asnapshots3 = ?cmd("sudo zfs list -H -r -t snapshot " ++ AnglerFish),
             ?assertEqual(2, length(string:tokens(Asnapshots3, "\n"))),
             Tsnapshots3 = ?cmd("sudo zfs list -H -r -t snapshot " ++ Turtle),
