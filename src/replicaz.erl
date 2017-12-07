@@ -29,8 +29,6 @@
 % Perform the replication, ensuring that the auto-snapshot property is
 % restored to its previous value if an error occurs during replication.
 guard_replicate(FromSet, ToSet) ->
-    % out of sheer laziness, start SSH unconditionally
-    ssh:start(),
     % capture the current auto-snapshot settings
     FromSnapVal = get_snapshot_setting(FromSet, fun run_local_cmd/1),
     ToSnapVal = get_snapshot_setting(ToSet, fun run_dest_cmd/1),

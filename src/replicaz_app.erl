@@ -26,6 +26,8 @@
 -export([start/2, stop/1]).
 
 start(_Type, _Args) ->
+    % out of sheer laziness, start SSH unconditionally
+    ssh:start(),
     {ok, Datasets} = application:get_env(replicaz, datasets),
     replicaz_sup:start_link(Datasets).
 
