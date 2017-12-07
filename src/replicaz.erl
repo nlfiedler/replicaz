@@ -199,12 +199,15 @@ generate_pipe_script(FirstCmd, SecondCmd) ->
 
 % Run the given command using a port and ensure it exits without error.
 % Return the output from the command as a list of bytes.
-run_local_cmd("zfs " ++ Cmd) ->
-    % running zfs commands locally often requires sudo
-    run_local_cmd(maybe_local_sudo("zfs " ++ Cmd));
 run_local_cmd(Cmd) ->
-    lager:info("running local cmd: ~s", [Cmd]),
-    ScriptPort = erlang:open_port({spawn, Cmd}, [exit_status]),
+    % use case instead of function clauses to avoid infinite loop
+    NewCmd = case Cmd of
+        % running zfs commands locally often requires sudo
+        "zfs " ++ _Cmd -> maybe_local_sudo(Cmd);
+        _ -> Cmd
+    end,
+    lager:info("running command locally: ~s", [NewCmd]),
+    ScriptPort = erlang:open_port({spawn, NewCmd}, [exit_status]),
     {ok, 0, Output} = wait_for_port(ScriptPort),
     Output.
 
@@ -217,17 +220,11 @@ run_dest_cmd(Cmd) ->
 % Run the given command using a port and ensure it exits without error.
 % Return the output from the command as a list of bytes. If Remote is a
 % string (and not 'undefined') then use SSH to run the command.
-run_dest_cmd("zfs " ++ Cmd, undefined) ->
-    % running zfs commands locally often requires sudo
-    run_dest_cmd(maybe_local_sudo("zfs " ++ Cmd), undefined);
 run_dest_cmd(Cmd, undefined) ->
-    lager:info("running dest cmd locally: ~s", [Cmd]),
-    ScriptPort = erlang:open_port({spawn, Cmd}, [exit_status]),
-    {ok, 0, Output} = wait_for_port(ScriptPort),
-    Output;
+    run_local_cmd(Cmd);
 run_dest_cmd(Cmd, Remote) ->
     FinalCmd = maybe_add_sudo(Cmd),
-    lager:info("running dest cmd remotely: ~s", [FinalCmd]),
+    lager:info("running command remotely: ~s", [FinalCmd]),
     {ConnectionRef, ChannelId} = ssh_connect(Remote),
     success = ssh_connection:exec(ConnectionRef, ChannelId, FinalCmd, infinity),
     {ok, 0, Output} = wait_for_closed(ConnectionRef, ChannelId),
