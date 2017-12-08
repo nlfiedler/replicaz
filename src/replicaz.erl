@@ -241,6 +241,7 @@ ssh_connect(Remote) ->
         {user_interaction, false},
         {quiet_mode, true}
     ],
+    lager:info("attempting ssh connect ~s@~s", [User, Host]),
     {ok, ConnectionRef} = ssh:connect(Host, 22, SshOpts),
     {ok, ChannelId} =  ssh_connection:session_channel(ConnectionRef, infinity),
     {ConnectionRef, ChannelId}.
