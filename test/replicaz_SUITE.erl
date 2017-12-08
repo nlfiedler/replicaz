@@ -122,7 +122,8 @@ replicate_test(Config) ->
             Tsnapshots3 = ?cmd("sudo zfs list -H -r -t snapshot " ++ Turtle),
             ?assertEqual(2, length(string:tokens(Tsnapshots3, "\n"))),
             ?assertCmd("sudo zpool destroy " ++ Tank),
-            ok = file:delete(FSFile)
+            ok = file:delete(FSFile),
+            ?assertCmd("sudo rmdir /" ++ Tank)
     end.
 
 % Run the mkfile command (or its Linux equivalent) to create a temporary
