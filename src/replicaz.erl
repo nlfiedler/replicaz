@@ -327,7 +327,7 @@ maybe_local_sudo(Cmd) ->
 get_remote() ->
     case erlang:get(rpz_ssh_host) of
         undefined -> undefined;
-        {ok, Host} ->
+        Host ->
             User = erlang:get(rpz_ssh_user),
             string:join([User, Host], "@")
     end.
