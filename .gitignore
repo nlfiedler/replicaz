@@ -1,6 +1,9 @@
+.vagrant
 *.beam
+*.pyc
 _build
 erl_crash.dump
 rebar.lock
+ssh_config
 user_env.config
 user_vm.args

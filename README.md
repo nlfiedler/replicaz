@@ -21,28 +21,37 @@ To build and test the application:
 $ rebar3 ct
 ```
 
-### Deploying
+### Using Vagrant
 
-1. Write a configuration file, named `user_env.config`, at the base of the source tree.
-    * See `example.config` in the `docs` directory.
-1. Build the release: `rebar3 release`
-1. Copy the contents of `_build/default/rel` to the desired installation location.
-1. Start it up, likely using `sudo`.
-1. Occasionally check the log files in `/opt/replicaz/log`.
-
-For example:
+Unfortunately, a Docker container does not have sufficient privileges to create
+or destroy ZFS pools, but it can do just about everything else. As such, testing
+can be done within a VM, but not within a container. The test suite itself is
+rather delicate and specific to testing on Ubuntu in a VM. Use
+[Vagrant](https://www.vagrantup.com) and [Fabric](http://www.fabfile.org) 1.x to
+set up the VM.
 
 ```shell
-$ cp ~/replicaz.config user_env.config
-$ rebar3 release
-$ sudo mkdir -p /opt
-$ sudo cp -R _build/default/rel/replicaz /opt
-$ sudo /opt/replicaz/bin/replicaz -detached
+host$ vagrant up
+host$ fab provision
+host$ vagrant ssh
+vagrant$ cd /vagrant
+vagrant$ rebar3 clean
+vagrant$ rebar3 compile
+vagrant$ rebar3 ct
 ```
 
-### BSD daemon
+## Deployment
 
-See the `config/replicaz.rc` file for an example of managing the replicaz application as a daemon via `rc.d` in BSD systems (in particular FreeBSD, and likely NetBSD as well). You will need to build and deploy the application as described above, and then use the `service` command to start it, as illustrated in `replicaz.rc`.
+### Docker
+
+The application is easily deployed using [Docker](https://www.docker.com), as
+there is a provided `Dockerfile` and `docker-compose.yml` file for building and
+running the application in Docker.
+
+1. Write a configuration file, named `user_env.config`, at the base of the source tree.
+    * See `example.config` in the `config` directory.
+1. Build the release: `rebar3 release`
+1. Copy the contents of `_build/default/rel` to the desired installation location.
 
 ## Remote Replication
 

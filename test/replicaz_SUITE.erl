@@ -1,7 +1,7 @@
 %% -*- coding: utf-8 -*-
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2016-2017 Nathan Fiedler
+%% Copyright (c) 2016-2018 Nathan Fiedler
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -52,11 +52,11 @@ replicate_test(Config) ->
             ct:log("missing 'zfs' in PATH, skipping test..."),
             ok;
         _ZfsBin ->
-            PrivDir = ?config(priv_dir, Config),
-            % create the datasets for testing
-            FSFile = filename:join(PrivDir, "tank_file"),
+            % create the datasets for testing; note that with Vagrant we cannot
+            % allocate the file on the shared volume (i.e. priv dir)
+            FSFile = "/mnt/tank_file",
             mkfile(FSFile),
-            % ZFS on Mac and Linux both require sudo access, and FreeBSD doesn't mind.
+            % Running on docker as root, no need for sudo (also not available).
             % Specify a mount point to avoid unexpected defaults (e.g. ZFS on Mac).
             Tank = ?config(tank, Config),
             AnglerFish = Tank ++ "/anglerfish",
@@ -84,7 +84,7 @@ replicate_test(Config) ->
                 {period, daily},
                 {frequency, 1},
                 {use_sudo, true},
-                {local_sudo, true}  % tests are not run as root, need sudo
+                {local_sudo, true}
             ]}, {"nise", [
                 {from_dataset, "whatever"},
                 {to_dataset, "dontmind"},
@@ -95,9 +95,9 @@ replicate_test(Config) ->
             % fire up the application and wait for it to finish
             {ok, _Started} = application:ensure_all_started(replicaz),
             ok = gen_server:call(replicaz_srv_cmntest, test_backup, infinity),
-            Asnapshots1 = ?cmd("sudo zfs list -H -r -t snapshot " ++ AnglerFish),
+            Asnapshots1 = ?cmd("zfs list -H -r -t snapshot " ++ AnglerFish),
             ?assertEqual(1, length(string:tokens(Asnapshots1, "\n"))),
-            Tsnapshots1 = ?cmd("sudo zfs list -H -r -t snapshot " ++ Turtle),
+            Tsnapshots1 = ?cmd("zfs list -H -r -t snapshot " ++ Turtle),
             ?assertEqual(1, length(string:tokens(Tsnapshots1, "\n"))),
             %
             % run it again to make sure it produces new snapshots
@@ -106,9 +106,9 @@ replicate_test(Config) ->
             ok = timer:sleep(1100),
             writefile("/" ++ AnglerFish ++ "/random1.dat"),
             ok = gen_server:call(replicaz_srv_cmntest, test_backup, infinity),
-            Asnapshots2 = ?cmd("sudo zfs list -H -r -t snapshot " ++ AnglerFish),
+            Asnapshots2 = ?cmd("zfs list -H -r -t snapshot " ++ AnglerFish),
             ?assertEqual(2, length(string:tokens(Asnapshots2, "\n"))),
-            Tsnapshots2 = ?cmd("sudo zfs list -H -r -t snapshot " ++ Turtle),
+            Tsnapshots2 = ?cmd("zfs list -H -r -t snapshot " ++ Turtle),
             ?assertEqual(2, length(string:tokens(Tsnapshots2, "\n"))),
             %
             % run it a third time and ensure only 2 snapshots exist
@@ -117,12 +117,12 @@ replicate_test(Config) ->
             ok = timer:sleep(1100),
             writefile("/" ++ AnglerFish ++ "/random2.dat"),
             ok = gen_server:call(replicaz_srv_cmntest, test_backup, infinity),
-            Asnapshots3 = ?cmd("sudo zfs list -H -r -t snapshot " ++ AnglerFish),
+            Asnapshots3 = ?cmd("zfs list -H -r -t snapshot " ++ AnglerFish),
             ?assertEqual(2, length(string:tokens(Asnapshots3, "\n"))),
-            Tsnapshots3 = ?cmd("sudo zfs list -H -r -t snapshot " ++ Turtle),
+            Tsnapshots3 = ?cmd("zfs list -H -r -t snapshot " ++ Turtle),
             ?assertEqual(2, length(string:tokens(Tsnapshots3, "\n"))),
             ?assertCmd("sudo zpool destroy " ++ Tank),
-            ok = file:delete(FSFile),
+            ?assertCmd("sudo rm -f " ++ FSFile),
             ?assertCmd("sudo rmdir /" ++ Tank)
     end.
 
@@ -136,7 +136,7 @@ mkfile(FSFile) ->
                 false ->
                     error("need either 'mkfile' or 'fallocate' to run tests");
                 FBin ->
-                    ?assertCmd(FBin ++ " -l 64M " ++ FSFile)
+                    ?assertCmd("sudo " ++ FBin ++ " -l 64M " ++ FSFile)
             end;
         MBin ->
             ?assertCmd(MBin ++ " 64m " ++ FSFile)
