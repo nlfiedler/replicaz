@@ -8,11 +8,17 @@
 FROM ubuntu:18.04
 
 #
-# We need rebar3, which itself requires Erlang/OTP and git.
+# We need rebar3, which itself requires Erlang/OTP and git,
+# and we need SSH for remote replication.
 #
 ENV DEBIAN_FRONTEND noninteractive
 RUN apt-get update
-RUN apt-get -q -y install apt-utils zfsutils-linux erlang git
+RUN apt-get -q -y install \
+    apt-utils \
+    erlang \
+    git \
+    openssh-client \
+    zfsutils-linux
 ADD https://github.com/erlang/rebar3/releases/download/3.7.4/rebar3 /bin/rebar3
 RUN chmod +x /bin/rebar3
 
