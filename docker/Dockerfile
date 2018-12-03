@@ -29,6 +29,6 @@ COPY rebar.config .
 COPY rebar.config.script .
 COPY src src
 COPY test test
-RUN rebar3 compile
+RUN rebar3 release
 
 ENTRYPOINT [ "/bin/bash" ]
