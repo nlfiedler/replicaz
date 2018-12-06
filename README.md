@@ -10,7 +10,7 @@ Note that this application uses the `-F` option for `zfs recv` such that the des
 
 ### Prerequisites
 
-* [Erlang/OTP](http://www.erlang.org) R18 or higher
+* [Erlang/OTP](http://www.erlang.org) R19 or higher
 * [rebar3](https://github.com/erlang/rebar3/) 3.0.0 or higher
 
 ### Testing
@@ -25,10 +25,9 @@ $ rebar3 ct
 
 Unfortunately, a Docker container does not have sufficient privileges to create
 or destroy ZFS pools, but it can do just about everything else. As such, testing
-can be done within a VM, but not within a container. The test suite itself is
-rather delicate and specific to testing on Ubuntu in a VM. Use
-[Vagrant](https://www.vagrantup.com) and [Fabric](http://www.fabfile.org) 1.x to
-set up the VM.
+can be done within a VM, such as [Ubuntu](https://www.ubuntu.com). This project
+uses [Vagrant](https://www.vagrantup.com) and [Fabric](http://www.fabfile.org)
+1.x to set up a VM.
 
 ```shell
 host$ vagrant up
@@ -37,7 +36,10 @@ host$ vagrant ssh
 vagrant$ cd /vagrant
 vagrant$ rebar3 clean
 vagrant$ rebar3 compile
-vagrant$ rebar3 ct
+vagrant$ sudo fallocate -l 64M /mnt/tank
+vagrant$ sudo zpool create replicaz /mnt/tank
+vagrant$ RPZ_TEST_POOL=replicaz rebar3 ct
+vagrant$ sudo zpool destroy replicaz
 ```
 
 ## Deployment
@@ -48,10 +50,11 @@ The application is easily deployed using [Docker](https://www.docker.com), as
 there is a provided `Dockerfile` and `docker-compose.yml` file for building and
 running the application in Docker.
 
-1. Write a configuration file, named `user_env.config`, at the base of the source tree.
+1. Put a configuration file, named `user_env.config`, in the `config` directory.
     * See `example.config` in the `config` directory.
-1. Build the release: `rebar3 release`
-1. Copy the contents of `_build/default/rel` to the desired installation location.
+1. Craft a "production" Compose file that defines a named volume.
+1. Invoke `docker-compose build` to build the container.
+1. Deploy to the engine as desired.
 
 ## Remote Replication
 

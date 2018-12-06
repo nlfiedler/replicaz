@@ -61,8 +61,10 @@ replicate(FromSet, ToSet) ->
 % Retrieve auto-snapshot setting for named dataset, using the given
 % function, which handles local versus remote command execution.
 get_snapshot_setting(DataSet, CmdRunner) ->
-    Output = CmdRunner("zfs get -Ho value com.sun:auto-snapshot " ++ DataSet),
-    Value = string:strip(Output, both, $\n),
+    Value = case CmdRunner("zfs get -Ho value com.sun:auto-snapshot " ++ DataSet) of
+        {ok, Output} -> string:strip(Output, both, $\n);
+        {error, _Err} -> "false"
+    end,
     lager:info("~p com.sun:auto-snapshot=~p", [DataSet, Value]),
     Value.
 
@@ -75,7 +77,7 @@ our_snapshots(DataSet, CmdRunner) ->
     %
     % For example: dataset@replica:2016-09-03-04:15:12
     lager:info("fetching snapshots for ~s", [DataSet]),
-    SnapshotsOut = CmdRunner("zfs list -t snapshot -Hro name " ++ DataSet),
+    {ok, SnapshotsOut} = CmdRunner("zfs list -t snapshot -Hro name " ++ DataSet),
     SplitOutput = re:split(SnapshotsOut, "\n", [{return, list}]),
     Snapshots = lists:filter(fun(Line) -> length(Line) > 0 end, SplitOutput),
     Label = erlang:get(rpz_label),
@@ -154,7 +156,7 @@ send_snapshot(Src, Dst, SrcSnaps, DestSnaps) ->
 % function, which handles local versus remote command execution.
 prune_old_snapshots(Dataset, Snapshots, CmdRunner) when length(Snapshots) > 2 ->
     Destroy = fun(Name, Snap) ->
-        Output = CmdRunner("zfs destroy " ++ Name ++ "@" ++ Snap),
+        {ok, Output} = CmdRunner("zfs destroy " ++ Name ++ "@" ++ Snap),
         if length(Output) > 1 ->
                 lager:error("zfs destroy output: ~s", [Output]);
             true -> ok
@@ -208,8 +210,10 @@ run_local_cmd(Cmd) ->
     end,
     lager:info("running command locally: ~s", [NewCmd]),
     ScriptPort = erlang:open_port({spawn, NewCmd}, [exit_status]),
-    {ok, 0, Output} = wait_for_port(ScriptPort),
-    Output.
+    case wait_for_port(ScriptPort) of
+        {ok, 0, Output} -> {ok, Output};
+        {ok, _, Output} -> {error, Output}
+    end.
 
 % Run the given command for the destination dataset, possibly running it
 % over an SSH connection, and possibly prefixed with "sudo" (but only if
@@ -227,9 +231,12 @@ run_dest_cmd(Cmd, Remote) ->
     lager:info("running command remotely: ~s", [FinalCmd]),
     {ConnectionRef, ChannelId} = ssh_connect(Remote),
     success = ssh_connection:exec(ConnectionRef, ChannelId, FinalCmd, infinity),
-    {ok, 0, Output} = wait_for_closed(ConnectionRef, ChannelId),
+    {Result, Output} = case wait_for_closed(ConnectionRef, ChannelId) of
+        {ok, 0, Out} -> {ok, Out};
+        {ok, _EC, Out} -> {error, Out}
+    end,
     ok = ssh:close(ConnectionRef),
-    binary_to_list(Output).
+    {Result, binary_to_list(Output)}.
 
 % Construct an SSH connection to the remote system and return the
 % connection reference and channel identifier in a tuple.

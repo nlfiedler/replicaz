@@ -29,9 +29,8 @@
 init_per_suite(Config) ->
     % ensure lager is configured for testing
     ok = application:set_env(lager, lager_common_test_backend, debug),
-    % Generate a unique ZFS dataset name, ensuring the first character is a
-    % letter, which ZFS requires.
-    Tank = [$a | string:substr(string:to_lower(ulid:generate_list()), 2)],
+    % get the name of the zfs pool we are using for testing
+    Tank = get_env("RPZ_TEST_POOL"),
     [{tank, Tank} | Config].
 
 end_per_suite(_Config) ->
@@ -52,20 +51,18 @@ replicate_test(Config) ->
             ct:log("missing 'zfs' in PATH, skipping test..."),
             ok;
         _ZfsBin ->
-            % create the datasets for testing; note that with Vagrant we cannot
-            % allocate the file on the shared volume (i.e. priv dir)
-            FSFile = "/mnt/tank_file",
-            mkfile(FSFile),
-            % Running on docker as root, no need for sudo (also not available).
-            % Specify a mount point to avoid unexpected defaults (e.g. ZFS on Mac).
+            %
+            % prepare the datasets for testing
+            %
             Tank = ?config(tank, Config),
             AnglerFish = Tank ++ "/anglerfish",
             Turtle = Tank ++ "/turtle",
-            ?assertCmd("sudo zpool create -m /" ++ Tank ++ " " ++ Tank ++ " " ++ FSFile),
             ?assertCmd("sudo zfs create " ++ AnglerFish),
             ?assertCmd("sudo zfs create " ++ Turtle),
             ?assertCmd("sudo chmod -R 777 /" ++ Tank),
+            %
             % copy everything except the logs, which contain our 64MB files
+            %
             Cwd = os:getenv("PWD"),
             ?assertCmd("rsync --exclude=logs -r " ++ Cwd ++ "/* /" ++ AnglerFish),
             %
@@ -92,7 +89,9 @@ replicate_test(Config) ->
                 {frequency, 4}
             ]}],
             ok = application:set_env(replicaz, datasets, DatasetsConf),
+            %
             % fire up the application and wait for it to finish
+            %
             {ok, _Started} = application:ensure_all_started(replicaz),
             ok = gen_server:call(replicaz_srv_cmntest, test_backup, infinity),
             Asnapshots1 = ?cmd("zfs list -H -r -t snapshot " ++ AnglerFish),
@@ -121,29 +120,22 @@ replicate_test(Config) ->
             ?assertEqual(2, length(string:tokens(Asnapshots3, "\n"))),
             Tsnapshots3 = ?cmd("zfs list -H -r -t snapshot " ++ Turtle),
             ?assertEqual(2, length(string:tokens(Tsnapshots3, "\n"))),
-            ?assertCmd("sudo zpool destroy " ++ Tank),
-            ?assertCmd("sudo rm -f " ++ FSFile),
-            ?assertCmd("sudo rmdir /" ++ Tank)
+            %
+            % clean up
+            %
+            ?assertCmd("sudo zfs destroy -r " ++ AnglerFish),
+            ?assertCmd("sudo zfs destroy -r " ++ Turtle)
     end.
-
-% Run the mkfile command (or its Linux equivalent) to create a temporary
-% filesytem for ZFS to use as a storage pool.
-mkfile(FSFile) ->
-    case os:find_executable("mkfile") of
-        false ->
-            % Hipster Linux doesn't use your grandfather's mkfile...
-            case os:find_executable("fallocate") of
-                false ->
-                    error("need either 'mkfile' or 'fallocate' to run tests");
-                FBin ->
-                    ?assertCmd("sudo " ++ FBin ++ " -l 64M " ++ FSFile)
-            end;
-        MBin ->
-            ?assertCmd(MBin ++ " 64m " ++ FSFile)
-    end,
-    ok.
 
 % Write some random data to the given file path.
 writefile(Filename) ->
     Bytes = crypto:strong_rand_bytes(1024),
     ok = file:write_file(Filename, Bytes).
+
+% Retrieve an environment variable, ensuring it is defined.
+get_env(Name) ->
+    case os:getenv(Name) of
+        false ->
+            error(lists:flatten(io_lib:format("must define ~p environment variable", [Name])));
+        Value -> Value
+    end.
