@@ -1,7 +1,7 @@
 %% -*- coding: utf-8 -*-
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2017 Nathan Fiedler
+%% Copyright (c) 2017-2018 Nathan Fiedler
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -91,6 +91,10 @@ process_dataset({Key, Values}) ->
     case proplists:get_value(ssh_user, Values) of
         undefined -> erlang:erase(rpz_ssh_user);
         SshUser -> erlang:put(rpz_ssh_user, SshUser)
+    end,
+    case proplists:get_value(ssh_user_dir, Values) of
+        undefined -> erlang:erase(rpz_ssh_user_dir);
+        UserDir -> erlang:put(rpz_ssh_user_dir, UserDir)
     end,
     lager:info("starting replication of dataset ~s", [Key]),
     FromSet = proplists:get_value(from_dataset, Values),

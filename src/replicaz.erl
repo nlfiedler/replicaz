@@ -1,7 +1,7 @@
 %% -*- coding: utf-8 -*-
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015-2017 Nathan Fiedler
+%% Copyright (c) 2015-2018 Nathan Fiedler
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -219,17 +219,18 @@ run_local_cmd(Cmd) ->
 % over an SSH connection, and possibly prefixed with "sudo" (but only if
 % remote). Return the output as a list of bytes.
 run_dest_cmd(Cmd) ->
-    run_dest_cmd(Cmd, get_remote()).
+    run_dest_cmd(Cmd, erlang:get(rpz_ssh_host)).
 
 % Run the given command using a port and ensure it exits without error.
 % Return the output from the command as a list of bytes. If Remote is a
 % string (and not 'undefined') then use SSH to run the command.
 run_dest_cmd(Cmd, undefined) ->
     run_local_cmd(Cmd);
-run_dest_cmd(Cmd, Remote) ->
+run_dest_cmd(Cmd, Host) ->
     FinalCmd = maybe_add_sudo(Cmd),
     lager:info("running command remotely: ~s", [FinalCmd]),
-    {ConnectionRef, ChannelId} = ssh_connect(Remote),
+    User = erlang:get(rpz_ssh_user),
+    {ConnectionRef, ChannelId} = ssh_connect(Host, User),
     success = ssh_connection:exec(ConnectionRef, ChannelId, FinalCmd, infinity),
     {Result, Output} = case wait_for_closed(ConnectionRef, ChannelId) of
         {ok, 0, Out} -> {ok, Out};
@@ -240,14 +241,17 @@ run_dest_cmd(Cmd, Remote) ->
 
 % Construct an SSH connection to the remote system and return the
 % connection reference and channel identifier in a tuple.
-ssh_connect(Remote) ->
-    [User, Host] = re:split(Remote, "@", [{return, list}]),
-    SshOpts = [
+ssh_connect(Host, User) ->
+    BaseSshOpts = [
         {user, User},
         {silently_accept_hosts, true},
         {user_interaction, false},
         {quiet_mode, true}
     ],
+    SshOpts = case erlang:get(rpz_ssh_user_dir) of
+        undefined -> BaseSshOpts;
+        UserDir -> BaseSshOpts ++ [{user_dir, UserDir}]
+    end,
     lager:info("attempting ssh connect ~s@~s", [User, Host]),
     {ok, ConnectionRef} = ssh:connect(Host, 22, SshOpts),
     {ok, ChannelId} =  ssh_connection:session_channel(ConnectionRef, infinity),
@@ -312,9 +316,12 @@ ensure_port_closed(Port) ->
 
 % Construct the command for the receiving end of the replication stream.
 build_recv_cmd(Cmd) ->
-    case get_remote() of
+    case erlang:get(rpz_ssh_host) of
         undefined -> maybe_local_sudo(Cmd);
-        Remote -> string:join(["ssh", Remote, maybe_add_sudo(Cmd)], " ")
+        Host ->
+            User = erlang:get(rpz_ssh_user),
+            Remote = string:join([User, Host], "@"),
+            string:join(["ssh", Remote, maybe_add_sudo(Cmd)], " ")
     end.
 
 % Prepend the given command with "sudo", as needed.
@@ -329,13 +336,4 @@ maybe_local_sudo(Cmd) ->
     case erlang:get(rpz_local_sudo) of
         undefined -> Cmd;
         _ -> "sudo " ++ Cmd
-    end.
-
-% Return either "<ssh_user>@<ssh_host>" or undefined.
-get_remote() ->
-    case erlang:get(rpz_ssh_host) of
-        undefined -> undefined;
-        Host ->
-            User = erlang:get(rpz_ssh_user),
-            string:join([User, Host], "@")
     end.
