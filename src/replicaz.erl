@@ -77,20 +77,23 @@ our_snapshots(DataSet, CmdRunner) ->
     %
     % For example: dataset@replica:2016-09-03-04:15:12
     lager:info("fetching snapshots for ~s", [DataSet]),
-    {ok, SnapshotsOut} = CmdRunner("zfs list -t snapshot -Hro name " ++ DataSet),
-    SplitOutput = re:split(SnapshotsOut, "\n", [{return, list}]),
-    Snapshots = lists:filter(fun(Line) -> length(Line) > 0 end, SplitOutput),
-    Label = erlang:get(rpz_label),
-    {ok, MP} = re:compile("@" ++ Label ++ ":\\d{4}-\\d{2}-\\d{2}-\\d{2}:\\d{2}:\\d{2}"),
-    KeepOurs = fun(Elem) ->
-        case re:run(Elem, MP) of
-            {match, _Captured} -> true;
-            _ -> false
-        end
-    end,
-    OurSnaps = lists:filter(KeepOurs, Snapshots),
-    Snapnames = [hd(tl(re:split(S, "@", [{return, list}]))) || S <- OurSnaps],
-    lists:sort(Snapnames).
+    case CmdRunner("zfs list -t snapshot -Hro name " ++ DataSet) of
+        {ok, SnapshotsOut} ->
+            SplitOutput = re:split(SnapshotsOut, "\n", [{return, list}]),
+            Snapshots = lists:filter(fun(Line) -> length(Line) > 0 end, SplitOutput),
+            Label = erlang:get(rpz_label),
+            {ok, MP} = re:compile("@" ++ Label ++ ":\\d{4}-\\d{2}-\\d{2}-\\d{2}:\\d{2}:\\d{2}"),
+            KeepOurs = fun(Elem) ->
+                case re:run(Elem, MP) of
+                    {match, _Captured} -> true;
+                    _ -> false
+                end
+            end,
+            OurSnaps = lists:filter(KeepOurs, Snapshots),
+            Snapnames = [hd(tl(re:split(S, "@", [{return, list}]))) || S <- OurSnaps],
+            lists:sort(Snapnames);
+        {error, _Empty} -> []
+    end.
 
 % Send a replication stream for a single snapshot.
 send_full(Src, Dst, Tag) ->

@@ -58,7 +58,6 @@ replicate_test(Config) ->
             AnglerFish = Tank ++ "/anglerfish",
             Turtle = Tank ++ "/turtle",
             ?assertCmd("sudo zfs create " ++ AnglerFish),
-            ?assertCmd("sudo zfs create " ++ Turtle),
             ?assertCmd("sudo chmod -R 777 /" ++ Tank),
             %
             % copy everything except the logs, which contain our 64MB files
