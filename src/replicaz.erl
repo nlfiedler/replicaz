@@ -324,7 +324,27 @@ build_recv_cmd(Cmd) ->
         Host ->
             User = erlang:get(rpz_ssh_user),
             Remote = string:join([User, Host], "@"),
-            string:join(["ssh", Remote, maybe_add_sudo(Cmd)], " ")
+            SshOpts = generate_ssh_opts(),
+            string:join(["ssh", SshOpts, Remote, maybe_add_sudo(Cmd)], " ")
+    end.
+
+% Based on the app config, build the set of -o flags to pass to
+% the ssh client so we reliably connect to the remote system.
+generate_ssh_opts() ->
+    case erlang:get(rpz_ssh_user_dir) of
+        undefined -> "";
+        UserDir ->
+            HostsFile = filename:join(UserDir, "known_hosts"),
+            case file:read_file_info(HostsFile) of
+                {ok, _Info} ->
+                    % assume this file is up to date
+                    "-o UserKnownHostsFile=" ++ HostsFile;
+                {error, _Reason} ->
+                    % an alternative, go wide open
+                    % "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
+                    % but for now assume defaults
+                    ""
+            end
     end.
 
 % Prepend the given command with "sudo", as needed.
