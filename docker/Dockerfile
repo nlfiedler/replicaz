@@ -25,6 +25,7 @@ RUN chmod +x /bin/rebar3
 WORKDIR /work
 
 COPY config config
+RUN test -f config/id_rsa && chmod 600 config/id_rsa
 COPY rebar.config .
 COPY rebar.config.script .
 COPY src src

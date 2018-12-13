@@ -196,6 +196,7 @@ generate_pipe_script(FirstCmd, SecondCmd) ->
             ScriptPath = filename:join(Cwd, "pipe_cmd.sh"),
             {ok, IoDevice} = file:open(ScriptPath, [write]),
             ScriptText = string:join(Cmds, "\n"),
+            lager:info(ScriptText),
             ok = file:write(IoDevice, list_to_binary(ScriptText)),
             ok = file:close(IoDevice),
             ok = file:write_file_info(ScriptPath, #file_info{mode=8#00755}),
@@ -324,25 +325,21 @@ build_recv_cmd(Cmd) ->
         Host ->
             User = erlang:get(rpz_ssh_user),
             Remote = string:join([User, Host], "@"),
-            SshOpts = generate_ssh_opts(),
+            SshOpts = build_ssh_opts(),
             string:join(["ssh", SshOpts, Remote, maybe_add_sudo(Cmd)], " ")
     end.
 
-% Based on the app config, build the set of -o flags to pass to
-% the ssh client so we reliably connect to the remote system.
-generate_ssh_opts() ->
+% If ssh_user_dir is defined and there exists an ssh_config file, pass that
+% to ssh via the -F option.
+build_ssh_opts() ->
     case erlang:get(rpz_ssh_user_dir) of
         undefined -> "";
         UserDir ->
-            HostsFile = filename:join(UserDir, "known_hosts"),
-            case file:read_file_info(HostsFile) of
+            ConfigFile = filename:join(UserDir, "ssh_config"),
+            case file:read_file_info(ConfigFile) of
                 {ok, _Info} ->
-                    % assume this file is up to date
-                    "-o UserKnownHostsFile=" ++ HostsFile;
+                    "-F " ++ ConfigFile;
                 {error, _Reason} ->
-                    % an alternative, go wide open
-                    % "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
-                    % but for now assume defaults
                     ""
             end
     end.
