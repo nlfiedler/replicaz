@@ -329,13 +329,13 @@ build_recv_cmd(Cmd) ->
             string:join(["ssh", SshOpts, Remote, maybe_add_sudo(Cmd)], " ")
     end.
 
-% If ssh_user_dir is defined and there exists an ssh_config file, pass that
+% If ssh_user_dir is defined and there exists a config file, pass that
 % to ssh via the -F option.
 build_ssh_opts() ->
     case erlang:get(rpz_ssh_user_dir) of
         undefined -> "";
         UserDir ->
-            ConfigFile = filename:join(UserDir, "ssh_config"),
+            ConfigFile = filename:join(UserDir, "config"),
             case file:read_file_info(ConfigFile) of
                 {ok, _Info} ->
                     "-F " ++ ConfigFile;
