@@ -12,20 +12,16 @@ FROM ubuntu:latest
 # and we need SSH for remote replication.
 #
 ENV DEBIAN_FRONTEND noninteractive
-RUN apt-get update
-RUN apt-get -q -y install \
-    apt-utils \
-    erlang \
-    git \
-    openssh-client \
-    zfsutils-linux
-ADD https://github.com/erlang/rebar3/releases/download/3.7.4/rebar3 /bin/rebar3
+RUN apt-get update && \
+    apt-get -q -y install apt-utils erlang git openssh-client zfsutils-linux
+ADD https://s3.amazonaws.com/rebar3/rebar3 /bin/rebar3
+#ADD https://github.com/erlang/rebar3/releases/download/3.7.4/rebar3 /bin/rebar3
 RUN chmod +x /bin/rebar3
 
 WORKDIR /work
 
 COPY config config
-RUN test -f config/id_rsa && chmod 600 config/id_rsa
+RUN test -f config/id_rsa && chmod 600 config/id_rsa; exit 0
 COPY rebar.config .
 COPY rebar.config.script .
 COPY src src
